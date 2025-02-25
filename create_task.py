@@ -19,6 +19,11 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")  # Example: "-123456789"
 # Vercel Deployment URL
 VERCEL_APP_URL = "https://paramos-hotel-backend.vercel.app"
 
+# Add these debug prints
+print(f"OPENAI_API_KEY set: {'Yes' if os.getenv('OPENAI_API_KEY') else 'No'}")
+print(f"TELEGRAM_BOT_TOKEN set: {'Yes' if os.getenv('TELEGRAM_BOT_TOKEN') else 'No'}")
+print(f"TELEGRAM_CHAT_ID set: {'Yes' if os.getenv('TELEGRAM_CHAT_ID') else 'No'}")
+
 def send_telegram_message(message):
     """Send a message to the Telegram group"""
     telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
