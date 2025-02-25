@@ -16,6 +16,9 @@ client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")  # Example: "-123456789"
 
+# Vercel Deployment URL
+VERCEL_APP_URL = "https://paramos-hotel-backend.vercel.app"
+
 def send_telegram_message(message):
     """Send a message to the Telegram group"""
     telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -24,8 +27,20 @@ def send_telegram_message(message):
         "text": message,
         "parse_mode": "Markdown"
     }
-    response = requests.post(telegram_url, json=payload)
-    return response.json()
+    
+    try:
+        response = requests.post(telegram_url, json=payload)
+        response_data = response.json()
+
+        if not response.ok or not response_data.get("ok"):
+            print(f"Telegram API Error: {response_data}")
+            return {"error": "Failed to send message to Telegram", "details": response_data}
+
+        return response_data
+    
+    except requests.exceptions.RequestException as e:
+        print(f"Request Error: {e}")
+        return {"error": "Telegram request failed", "details": str(e)}
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -35,7 +50,7 @@ def webhook():
     if not transcript:
         return jsonify({'error': 'No transcript provided'}), 400
 
-    # Use GPT-4o to extract task and room number
+    # Use GPT-4o-mini to extract task and room number
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -60,12 +75,14 @@ def webhook():
     telegram_message = f"🏨 *New Task Assigned*\n\n📌 *Task:* {task}\n🏠 *Room Number:* {room_number}"
 
     # Send message to Telegram group
-    send_telegram_message(telegram_message)
+    telegram_response = send_telegram_message(telegram_message)
 
     return jsonify({
         'task': task,
-        'room_number': room_number
+        'room_number': room_number,
+        'telegram_response': telegram_response
     })
 
+# Only required when running locally; Vercel handles execution automatically
 if __name__ == '__main__':
     app.run(port=5000)
