@@ -1,28 +1,16 @@
 from flask import Flask, request, jsonify
-import openai
 import os
 import requests
-from dotenv import load_dotenv  # Import dotenv
+from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
 
-# Initialize OpenAI client with the API key from .env file
-client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
 # Get Telegram Bot Token & Group Chat ID from .env
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")  # Example: "-123456789"
-
-# Vercel Deployment URL
-VERCEL_APP_URL = "https://paramos-hotel-backend.vercel.app"
-
-# Add these debug prints
-print(f"OPENAI_API_KEY set: {'Yes' if os.getenv('OPENAI_API_KEY') else 'No'}")
-print(f"TELEGRAM_BOT_TOKEN set: {'Yes' if os.getenv('TELEGRAM_BOT_TOKEN') else 'No'}")
-print(f"TELEGRAM_CHAT_ID set: {'Yes' if os.getenv('TELEGRAM_CHAT_ID') else 'No'}")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 def send_telegram_message(message):
     """Send a message to the Telegram group"""
@@ -50,34 +38,55 @@ def send_telegram_message(message):
 @app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.json
-    transcript = data.get('transcript')
-
-    if not transcript:
-        return jsonify({'error': 'No transcript provided'}), 400
-
-    # Use GPT-4o-mini to extract task and room number
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "Extract the task and room number from the following transcript. If the room number or task is missing, specify it as 0."},
-            {"role": "user", "content": transcript}
-        ],
-        max_tokens=100,
-        temperature=0.5,
-    )
-
-    output = response.choices[0].message.content.strip()
-
-    # Try to extract task and room number
-    try:
-        lines = output.split("\n")
-        task = lines[0].split(": ")[1] if len(lines) > 0 else "0"
-        room_number = lines[1].split(": ")[1] if len(lines) > 1 else "0"
-    except IndexError:
-        return jsonify({"error": "Unexpected response format", "response": output}), 500
+    
+    # Check if we're receiving structured data from function call
+    task = data.get('task')
+    room_number = data.get('roomNumber')
+    transcript = data.get('transcript', '')
+    
+    # If we didn't get structured data, fall back to the transcript extraction
+    if not task or not room_number:
+        if not transcript:
+            return jsonify({'error': 'No task details or transcript provided'}), 400
+            
+        # Fall back to the existing extraction logic
+        task = "Unknown task"
+        room_number = "Unknown room"
+        
+        # Look for room numbers
+        import re
+        room_patterns = [
+            r'room (\d+)',
+            r'room number (\d+)',
+            r'room #(\d+)',
+            r'#(\d+)'
+        ]
+        
+        for pattern in room_patterns:
+            room_match = re.search(pattern, transcript.lower())
+            if room_match:
+                room_number = room_match.group(1)
+                break
+        
+        # Extract the task
+        task_indicators = [
+            "need", "want", "please", "could you", "can you", "would like"
+        ]
+        
+        for indicator in task_indicators:
+            if indicator in transcript.lower():
+                parts = transcript.lower().split(indicator, 1)
+                if len(parts) > 1:
+                    task = parts[1].strip().capitalize()
+                    task = task[:50] + "..." if len(task) > 50 else task
+                    break
 
     # Create the message for Telegram
     telegram_message = f"🏨 *New Task Assigned*\n\n📌 *Task:* {task}\n🏠 *Room Number:* {room_number}"
+    
+    # Add transcript excerpt if available
+    if transcript:
+        telegram_message += f"\n\n💬 *Original Request:* {transcript[:100]}..."
 
     # Send message to Telegram group
     telegram_response = send_telegram_message(telegram_message)
