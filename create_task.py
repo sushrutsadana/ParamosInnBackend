@@ -43,6 +43,7 @@ def webhook():
     task = data.get('task')
     room_number = data.get('roomNumber')
     transcript = data.get('transcript', '')
+    food_items = data.get('foodItems', [])  # For in-room dining orders
     
     # If we didn't get structured data, fall back to the transcript extraction
     if not task or not room_number:
@@ -81,8 +82,19 @@ def webhook():
                     task = task[:50] + "..." if len(task) > 50 else task
                     break
 
-    # Create the message for Telegram
-    telegram_message = f"🏨 *New Task Assigned*\n\n📌 *Task:* {task}\n🏠 *Room Number:* {room_number}"
+    # Create the message for Telegram based on whether food items are present
+    if food_items:
+        # Format in-room dining order
+        items_text = "\n".join([f"• {item}" for item in food_items])
+        telegram_message = (
+            f"🍽️ *New In-Room Dining Order*\n\n"
+            f"🏠 *Room Number:* {room_number}\n"
+            f"📋 *Order Details:* {task}\n\n"
+            f"🍴 *Items:*\n{items_text}"
+        )
+    else:
+        # Regular task format
+        telegram_message = f"🏨 *New Task Assigned*\n\n📌 *Task:* {task}\n🏠 *Room Number:* {room_number}"
     
     # Add transcript excerpt if available
     if transcript:
@@ -94,6 +106,7 @@ def webhook():
     return jsonify({
         'task': task,
         'room_number': room_number,
+        'food_items': food_items,
         'telegram_response': telegram_response
     })
 
